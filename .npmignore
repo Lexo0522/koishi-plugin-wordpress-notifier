@@ -1,0 +1,36 @@
+# 源代码
+src/
+*.ts
+!lib/**/*.d.ts
+
+# 构建工具
+tsconfig.json
+.yarn/
+
+# 依赖管理
+node_modules/
+package-lock.json
+yarn.lock
+
+# 开发文件
+.git/
+.gitignore
+CONFIG.md
+
+# 测试文件
+test/
+tests/
+*.test.ts
+*.spec.ts
+
+# 文档
+docs/
+*.md
+!README.md
+
+# 其他
+.DS_Store
+*.log
+.env
+.env.local
+.env.*.local
