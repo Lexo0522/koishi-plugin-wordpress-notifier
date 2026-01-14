@@ -1,6 +1,12 @@
 import { Context, Schema, h } from 'koishi'
-
+export const inject = ['database', 'http']
 export const name = 'wordpress-notifier'
+
+declare module 'koishi' {
+  interface Tables {
+    wordpress_posts: WordPressPostRecord
+  }
+}
 
 export interface Config {
   wordpressUrl: string
@@ -26,6 +32,12 @@ export interface WordPressPost {
   tags: number[]
 }
 
+export interface WordPressPostRecord {
+  id: number
+  postId: number
+  pushedAt: Date
+}
+
 export const Config: Schema<Config> = Schema.object({
   wordpressUrl: Schema.string().description('WordPress 网站地址（例如：https://example.com）'),
   interval: Schema.number().default(3600000).description('检查间隔（毫秒，默认 1 小时）'),
@@ -38,7 +50,11 @@ export const Config: Schema<Config> = Schema.object({
 export function apply(ctx: Context, config: Config) {
   ctx.logger.info('WordPress 推送插件已加载')
 
-  const pushedPosts = new Set<number>()
+  ctx.model.extend('wordpress_posts', {
+    id: 'unsigned',
+    postId: 'integer',
+    pushedAt: 'timestamp'
+  })
 
   async function fetchLatestPosts(): Promise<WordPressPost[]> {
     try {
@@ -53,12 +69,16 @@ export function apply(ctx: Context, config: Config) {
     }
   }
 
-  function isPostPushed(postId: number): boolean {
-    return pushedPosts.has(postId)
+  async function isPostPushed(postId: number): Promise<boolean> {
+    const record = await ctx.database.get('wordpress_posts', { postId })
+    return record.length > 0
   }
 
-  function markPostAsPushed(postId: number) {
-    pushedPosts.add(postId)
+  async function markPostAsPushed(postId: number) {
+    await ctx.database.create('wordpress_posts', {
+      postId,
+      pushedAt: new Date()
+    })
   }
 
   function formatPostMessage(post: WordPressPost, mention: boolean = false): string {
@@ -85,19 +105,19 @@ export function apply(ctx: Context, config: Config) {
     if (posts.length === 0) return
 
     for (const post of posts) {
-      if (!isPostPushed(post.id)) {
+      if (!(await isPostPushed(post.id))) {
         const message = formatPostMessage(post, true)
         
         for (const target of config.targets) {
           try {
-            await ctx.broadcast([`onebot:${target}`], message)
+            await ctx.broadcast([target], message)
             ctx.logger.info(`已推送文章到 ${target}: ${post.title.rendered}`)
           } catch (error) {
             ctx.logger.error(`推送文章到 ${target} 失败: ${error}`)
           }
         }
         
-        markPostAsPushed(post.id)
+        await markPostAsPushed(post.id)
       }
     }
   }

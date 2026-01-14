@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WordPress 文章自动推送插件 - 完整使用教程</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #34495e;
+            border-left: 4px solid #3498db;
+            padding-left: 15px;
+            margin-top: 30px;
+        }
+        h3 {
+            color: #555;
+            margin-top: 25px;
+        }
+        code {
+            background-color: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: "Courier New", monospace;
+            font-size: 0.9em;
+        }
+        pre {
+            background-color: #2d2d2d;
+            color: #f8f8f2;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        pre code {
+            background-color: transparent;
+            padding: 0;
+            color: #f8f8f2;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #3498db;
+            color: white;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        ul, ol {
+            padding-left: 20px;
+        }
+        li {
+            margin: 5px 0;
+        }
+        blockquote {
+            border-left: 4px solid #3498db;
+            padding-left: 15px;
+            margin: 20px 0;
+            color: #666;
+            background-color: #f9f9f9;
+            padding: 10px 15px;
+        }
+        .output-box {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 15px;
+            margin: 15px 0;
+            font-family: "Courier New", monospace;
+            white-space: pre-wrap;
+        }
+        .feature-list {
+            list-style-type: none;
+            padding-left: 0;
+        }
+        .feature-list li {
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+        }
+        .feature-list li:before {
+            content: "✅ ";
+            margin-right: 8px;
+        }
+        .note {
+            background-color: #fff3cd;
+            border: 1px solid #ffc107;
+            border-radius: 5px;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .note-title {
+            font-weight: bold;
+            color: #856404;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+
+<h1>WordPress 文章自动推送插件 - 完整使用教程</h1>
+
+<h2>简介</h2>
+
+<p>WordPress 文章自动推送插件是一个强大的 Koishi 机器人插件，可以自动从 WordPress 网站获取最新文章，并推送到指定的 QQ 群或私聊。通过 WordPress REST API，插件能够实时监控网站内容更新，让您的读者第一时间获取最新资讯。</p>
+
+<h2>功能特性</h2>
+
+<ul class="feature-list">
+    <li><strong>自动获取文章</strong>：通过 WordPress REST API 自动获取最新文章</li>
+    <li><strong>定时推送</strong>：支持自定义检查间隔，定时推送新文章</li>
+    <li><strong>手动查询</strong>：支持手动查询最新文章和文章列表</li>
+    <li><strong>@全体成员</strong>：支持在推送时 @全体成员</li>
+    <li><strong>去重机制</strong>：完善的去重机制，避免重复推送同一篇文章</li>
+    <li><strong>数据库持久化</strong>：使用数据库存储已推送文章记录，机器人重启不丢失</li>
+    <li><strong>服务架构</strong>：采用服务模式架构，便于扩展和维护</li>
+    <li><strong>推送开关</strong>：支持自动推送开关，灵活控制</li>
+</ul>
+
+<h2>安装步骤</h2>
+
+<h3>前置要求</h3>
+
+<ul>
+    <li>已安装 Koishi 机器人（版本 4.18.10 或更高）</li>
+    <li>已配置好 QQ 适配器（如 OneBot）</li>
+    <li>WordPress 网站已启用 REST API（默认启用）</li>
+</ul>
+
+<h3>安装插件</h3>
+
+<h4>方法一：通过 Koishi 控制台安装</h4>
+
+<ol>
+    <li>打开 Koishi 控制台</li>
+    <li>进入「插件市场」</li>
+    <li>搜索 <code>wordpress-notifier</code></li>
+    <li>点击安装按钮</li>
+</ol>
+
+<h4>方法二：通过命令行安装</h4>
+
+<pre><code>npm install koishi-plugin-wordpress-notifier</code></pre>
+
+<h4>方法三：本地安装</h4>
+
+<p>如果您已经下载了插件源码：</p>
+
+<pre><code>cd external/wordpress-notifier
+npm install
+npm run build</code></pre>
+
+<h2>配置方法</h2>
+
+<h3>基础配置</h3>
+
+<p>在 Koishi 的配置文件 <code>koishi.yml</code> 中添加插件配置：</p>
+
+<pre><code>plugins:
+  wordpress-notifier:
+    wordpressUrl: 'https://your-wordpress-site.com'  # WordPress 网站地址
+    interval: 3600000  # 检查间隔（毫秒，默认 1 小时）
+    targets:
+      - '2801323326'  # 推送目标（群号或 QQ 号）
+    enableAutoPush: true  # 是否启用自动推送
+    mentionAll: false  # 是否 @全体成员
+    maxArticles: 5  # 每次最多推送的文章数量</code></pre>
+
+<h3>配置参数详解</h3>
+
+<table>
+    <thead>
+        <tr>
+            <th>参数</th>
+            <th>类型</th>
+            <th>默认值</th>
+            <th>说明</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>wordpressUrl</code></td>
+            <td>string</td>
+            <td>必填</td>
+            <td>WordPress 网站地址（例如：https://example.com）</td>
+        </tr>
+        <tr>
+            <td><code>interval</code></td>
+            <td>number</td>
+            <td>3600000</td>
+            <td>检查间隔，单位毫秒（默认 1 小时 = 3600000 毫秒）</td>
+        </tr>
+        <tr>
+            <td><code>targets</code></td>
+            <td>array</td>
+            <td>必填</td>
+            <td>推送目标列表，可以是群号或 QQ 号</td>
+        </tr>
+        <tr>
+            <td><code>enableAutoPush</code></td>
+            <td>boolean</td>
+            <td>true</td>
+            <td>是否启用自动推送</td>
+        </tr>
+        <tr>
+            <td><code>mentionAll</code></td>
+            <td>boolean</td>
+            <td>false</td>
+            <td>是否在推送时 @全体成员</td>
+        </tr>
+        <tr>
+            <td><code>maxArticles</code></td>
+            <td>number</td>
+            <td>5</td>
+            <td>每次最多推送的文章数量</td>
+        </tr>
+    </tbody>
+</table>
+
+<h3>配置示例</h3>
+
+<h4>示例 1：推送到单个群</h4>
+
+<pre><code>plugins:
+  wordpress-notifier:
+    wordpressUrl: 'https://www.example.com'
+    interval: 1800000  # 30 分钟检查一次
+    targets:
+      - '123456789'  # 群号
+    enableAutoPush: true
+    mentionAll: true
+    maxArticles: 3</code></pre>
+
+<h4>示例 2：推送到多个目标</h4>
+
+<pre><code>plugins:
+  wordpress-notifier:
+    wordpressUrl: 'https://www.example.com'
+    interval: 7200000  # 2 小时检查一次
+    targets:
+      - '123456789'  # 群号 1
+      - '987654321'  # 群号 2
+      - '111222333'  # QQ 号
+    enableAutoPush: true
+    mentionAll: false
+    maxArticles: 5</code></pre>
+
+<h2>使用命令</h2>
+
+<p>插件提供了多个命令，方便用户管理和使用：</p>
+
+<h3>1. 查看最新文章</h3>
+
+<p><strong>命令</strong>：<code>/wordpress.latest</code></p>
+
+<p><strong>功能</strong>：显示最新的 WordPress 文章列表，包含标题、日期和链接。</p>
+
+<p><strong>示例输出</strong>：</p>
+
+<div class="output-box">📰 最新文章：
+
+WordPress 文章自动推送插件
+📅 2024-01-14 10:30:00
+🔗 https://www.example.com/post-1
+
+从 GitHub 获取并展示最新开源仓库
+📅 2024-01-13 15:20:00
+🔗 https://www.example.com/post-2</div>
+
+<h3>2. 查看文章列表</h3>
+
+<p><strong>命令</strong>：<code>/wordpress.list</code></p>
+
+<p><strong>功能</strong>：显示文章 ID 和标题的简洁列表。</p>
+
+<p><strong>示例输出</strong>：</p>
+
+<div class="output-box">📚 文章列表：
+
+1. WordPress 文章自动推送插件
+2. 从 GitHub 获取并展示最新开源仓库
+3. WordPress REST API 入门指南</div>
+
+<h3>3. 手动推送最新文章</h3>
+
+<p><strong>命令</strong>：<code>/wordpress.push</code></p>
+
+<p><strong>功能</strong>：立即检查并推送最新文章（即使自动推送已关闭）。</p>
+
+<p><strong>示例输出</strong>：</p>
+
+<div class="output-box">已检查并推送最新文章</div>
+
+<h3>4. 查看插件状态</h3>
+
+<p><strong>命令</strong>：<code>/wordpress.status</code></p>
+
+<p><strong>功能</strong>：显示当前插件配置状态。</p>
+
+<p><strong>示例输出</strong>：</p>
+
+<div class="output-box">📊 WordPress 推送插件状态：
+🌐 网站地址: https://www.example.com
+⏰ 检查间隔: 3600 秒
+🎯 推送目标: 123456789
+🔔 自动推送: 开启
+📢 @全体成员: 关闭
+📝 最多推送: 5 篇</div>
+
+<h3>5. 切换自动推送开关</h3>
+
+<p><strong>命令</strong>：<code>/wordpress.toggle</code></p>
+
+<p><strong>功能</strong>：开启或关闭自动推送功能。</p>
+
+<p><strong>示例输出</strong>：</p>
+
+<div class="output-box">自动推送已开启</div>
+
+<p>或</p>
+
+<div class="output-box">自动推送已关闭</div>
+
+<h3>6. 切换 @全体成员 开关</h3>
+
+<p><strong>命令</strong>：<code>/wordpress.mention</code></p>
+
+<p><strong>功能</strong>：开启或关闭 @全体成员 功能。</p>
+
+<p><strong>示例输出</strong>：</p>
+
+<div class="output-box">@全体成员 已开启</div>
+
+<p>或</p>
+
+<div class="output-box">@全体成员 已关闭</div>
+
+<h3>7. 插件菜单</h3>
+
+<p><strong>命令</strong>：<code>/wordpress</code></p>
+
+<p><strong>功能</strong>：显示插件菜单和所有可用命令。</p>
+
+<p><strong>示例输出</strong>：</p>
+
+<div class="output-box">📚 WordPress 推送插件菜单：
+
+🔹 /wordpress.status - 查看插件状态
+🔹 /wordpress.latest - 查看最新文章
+🔹 /wordpress.list - 查看文章列表
+🔹 /wordpress.push - 手动推送最新文章
+🔹 /wordpress.toggle - 切换自动推送开关
+🔹 /wordpress.mention - 切换 @全体成员 开关
+
+💡 提示：所有命令都需要加 / 前缀</div>
+
+<h2>工作原理</h2>
+
+<h3>1. 数据库初始化</h3>
+
+<p>插件启动时会自动创建数据库表 <code>wordpress_posts</code>，用于记录已推送的文章：</p>
+
+<pre><code>CREATE TABLE wordpress_posts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  postId INTEGER NOT NULL,
+  pushedAt TIMESTAMP NOT NULL
+);</code></pre>
+
+<h3>2. 定时检查流程</h3>
+
+<ol>
+    <li><strong>定时器触发</strong>：每隔指定时间（默认 1 小时）触发一次检查</li>
+    <li><strong>获取文章</strong>：通过 WordPress REST API 获取最新文章</li>
+    <li><strong>去重检查</strong>：检查每篇文章是否已推送过</li>
+    <li><strong>格式化消息</strong>：将文章信息格式化为易读的消息</li>
+    <li><strong>推送消息</strong>：将消息发送到所有配置的目标</li>
+    <li><strong>记录推送</strong>：将文章 ID 记录到数据库中</li>
+</ol>
+
+<h3>3. REST API 请求</h3>
+
+<p>插件通过以下 URL 获取文章：</p>
+
+<pre><code>https://your-wordpress-site.com/wp-json/wp/v2/posts?per_page=5&orderby=date&order=desc</code></pre>
+
+<p>参数说明：</p>
+
+<ul>
+    <li><code>per_page=5</code>：每次获取 5 篇文章</li>
+    <li><code>orderby=date</code>：按日期排序</li>
+    <li><code>order=desc</code>：降序排列（最新的在前）</li>
+</ul>
+
+<h2>常见问题</h2>
+
+<h3>1. 为什么文章没有推送？</h3>
+
+<p><strong>可能原因</strong>：</p>
+
+<ul>
+    <li>WordPress 网站的 REST API 未启用</li>
+    <li>机器人没有向目标群或私聊发送消息的权限</li>
+    <li>文章已经被推送过（数据库中有记录）</li>
+    <li>自动推送功能已关闭</li>
+</ul>
+
+<p><strong>解决方法</strong>：</p>
+
+<ul>
+    <li>检查 WordPress 网站设置，确保 REST API 已启用</li>
+    <li>确认机器人在目标群中有发送消息权限</li>
+    <li>使用 <code>/wordpress.push</code> 命令手动触发推送</li>
+    <li>使用 <code>/wordpress.status</code> 检查插件状态</li>
+</ul>
+
+<h3>2. 如何修改检查间隔？</h3>
+
+<p>在配置文件中修改 <code>interval</code> 参数：</p>
+
+<pre><code>plugins:
+  wordpress-notifier:
+    interval: 1800000  # 30 分钟</code></pre>
+
+<div class="note">
+    <div class="note-title">建议</div>
+    <ul>
+        <li>频繁更新的网站：设置较短间隔（如 30 分钟）</li>
+        <li>更新较少的网站：设置较长间隔（如 2-4 小时）</li>
+        <li>避免设置过短间隔，以免频繁请求 WordPress 网站</li>
+    </ul>
+</div>
+
+<h3>3. @全体成员 功能不生效？</h3>
+
+<p><strong>可能原因</strong>：</p>
+
+<ul>
+    <li>机器人没有 @全体成员 的权限</li>
+    <li><code>mentionAll</code> 配置设置为 <code>false</code></li>
+</ul>
+
+<p><strong>解决方法</strong>：</p>
+
+<ul>
+    <li>在群设置中授予机器人 @全体成员 权限</li>
+    <li>使用 <code>/wordpress.mention</code> 命令开启功能</li>
+    <li>或在配置文件中设置 <code>mentionAll: true</code></li>
+</ul>
+
+<h3>4. 如何清空已推送文章的记录？</h3>
+
+<p>插件使用数据库存储记录，如需清空：</p>
+
+<pre><code># 方法 1：通过数据库管理工具
+DELETE FROM wordpress_posts;
+
+# 方法 2：重启插件（不推荐，会丢失所有记录）</code></pre>
+
+<h3>5. 支持推送到多个群吗？</h3>
+
+<p>支持！在配置文件中添加多个目标：</p>
+
+<pre><code>targets:
+  - '群号1'
+  - '群号2'
+  - 'QQ号'</code></pre>
+
+<h3>6. 机器人重启后会重复推送吗？</h3>
+
+<p>不会！插件使用数据库持久化存储已推送的文章记录，机器人重启后不会重复推送。</p>
+
+<h2>高级配置</h2>
+
+<h3>自定义消息格式</h3>
+
+<p>如果需要自定义推送消息格式，可以修改插件源码中的 <code>formatPostMessage</code> 函数：</p>
+
+<pre><code>function formatPostMessage(post: WordPressPost, mention: boolean = false): string {
+  const title = post.title.rendered.replace(/&lt;[^&gt;]*&gt;/g, '')
+  const excerpt = post.excerpt.rendered.replace(/&lt;[^&gt;]*&gt;/g, '').substring(0, 100)
+  const date = new Date(post.date).toLocaleString('zh-CN')
+  
+  let message = ''
+  if (mention && config.mentionAll) {
+    message += '@全体成员\n'
+  }
+  message += `📝 ${title}\n`
+  message += `📅 ${date}\n`
+  message += `📄 ${excerpt}...\n`
+  message += `🔗 ${post.link}`
+  
+  return message
+}</code></pre>
+
+<h3>添加更多文章信息</h3>
+
+<p>如果需要显示更多文章信息（如作者、分类等），可以扩展接口和消息格式：</p>
+
+<pre><code>export interface WordPressPost {
+  id: number
+  title: {
+    rendered: string
+  }
+  link: string
+  date: string
+  excerpt: {
+    rendered: string
+  }
+  author: number  // 作者 ID
+  categories: number[]  // 分类 ID
+  tags: number[]  // 标签 ID
+}</code></pre>
+
+<h2>性能优化建议</h2>
+
+<ol>
+    <li><strong>合理设置检查间隔</strong>：根据网站更新频率设置合适的检查间隔</li>
+    <li><strong>限制文章数量</strong>：通过 <code>maxArticles</code> 参数限制每次获取的文章数量</li>
+    <li><strong>使用 CDN</strong>：如果 WordPress 网站使用 CDN，可以加快 API 响应速度</li>
+    <li><strong>缓存优化</strong>：插件已内置去重机制，避免重复推送</li>
+</ol>
+
+<h2>总结</h2>
+
+<p>WordPress 文章自动推送插件是一个功能强大、易于使用的 Koishi 插件，可以帮助您自动将 WordPress 网站的最新文章推送到 QQ 群或私聊。通过本文的详细教程，您应该已经掌握了插件的安装、配置和使用方法。</p>
+
+<p>如果您在使用过程中遇到任何问题，欢迎在 GitHub 仓库中提交 Issue，或者通过插件提供的命令查看状态和日志。</p>
+
+<h2>相关链接</h2>
+
+<ul>
+    <li>插件仓库：<a href="https://github.com/Lexo0522/koishi-plugin-wordpress-notifier">https://github.com/Lexo0522/koishi-plugin-wordpress-notifier</a></li>
+    <li>Koishi 官方文档：<a href="https://koishi.js.org/">https://koishi.js.org/</a></li>
+    <li>WordPress REST API 文档：<a href="https://developer.wordpress.org/rest-api/">https://developer.wordpress.org/rest-api/</a></li>
+</ul>
+
+<hr>
+
+<p><strong>版本</strong>：1.1.0<br>
+<strong>更新日期</strong>：2024-01-14<br>
+<strong>作者</strong>：Your Name</p>
+
+</body>
+</html>
