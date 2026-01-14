@@ -1,0 +1,7 @@
+node_modules/
+lib/
+data/
+*.log
+*.tgz
+.DS_Store
+Thumbs.db

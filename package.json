@@ -1,0 +1,46 @@
+{
+  "name": "koishi-plugin-wordpress-notifier",
+  "version": "1.0.0",
+  "description": "WordPress 文章自动推送到 QQ",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "files": [
+    "lib",
+    "data"
+  ],
+  "license": "MIT",
+  "author": "Your Name <your.email@example.com>",
+  "scripts": {
+    "build": "tsc",
+    "build:watch": "tsc --watch",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "koishi": "^4.18.10"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  },
+  "peerDependencies": {
+    "koishi": "^4.18.10"
+  },
+  "keywords": [
+    "koishi",
+    "plugin",
+    "wordpress",
+    "notifier",
+    "qq"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/koishi-plugin-wordpress-notifier.git"
+  },
+  "homepage": "https://github.com/your-username/koishi-plugin-wordpress-notifier#readme",
+  "bugs": {
+    "url": "https://github.com/your-username/koishi-plugin-wordpress-notifier/issues"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}
