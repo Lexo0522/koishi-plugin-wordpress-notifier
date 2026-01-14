@@ -33,7 +33,6 @@ export interface WordPressPost {
 }
 
 export interface WordPressPostRecord {
-  id: number
   postId: number
   pushedAt: Date
 }
@@ -51,7 +50,6 @@ export function apply(ctx: Context, config: Config) {
   ctx.logger.info('WordPress 推送插件已加载')
 
   ctx.model.extend('wordpress_posts', {
-    id: 'unsigned',
     postId: 'integer',
     pushedAt: 'timestamp'
   })
