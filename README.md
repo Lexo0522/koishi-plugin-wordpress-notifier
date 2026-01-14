@@ -234,7 +234,7 @@ MIT
 
 - 插件仓库：https://github.com/Lexo0522/koishi-plugin-wordpress-notifier
 - Koishi 官方文档：https://koishi.js.org/
-- WordPress REST API 文档：https://developer.wordpress.org/rest-api/
+- WordPress REST API 文档：https://developer.wordpress.com/rest-api/
 
 ## 安装（Install）
 

@@ -9,7 +9,7 @@
     "data"
   ],
   "license": "MIT",
-  "author": "Your Name <your.email@example.com>",
+  "author": "kate522@88.com",
   "scripts": {
     "build": "tsc",
     "build:watch": "tsc --watch",
@@ -36,9 +36,9 @@
     "type": "git",
     "url": "https://github.com/Lexo0522/koishi-plugin-wordpress-notifier.git"
   },
-  "homepage": "https://github.com/your-username/koishi-plugin-wordpress-notifier#readme",
+  "homepage": "https://github.com/Lexo0522/koishi-plugin-wordpress-notifier#readme",
   "bugs": {
-    "url": "https://github.com/your-username/koishi-plugin-wordpress-notifier/issues"
+    "url": "https://github.com/Lexo0522/koishi-plugin-wordpress-notifier/issues"
   },
   "engines": {
     "node": ">=14.0.0"
