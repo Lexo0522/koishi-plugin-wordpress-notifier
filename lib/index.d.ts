@@ -29,6 +29,7 @@ export interface WordPressPost {
     tags: number[];
 }
 export interface WordPressPostRecord {
+    id: number;
     postId: number;
     pushedAt: Date;
 }

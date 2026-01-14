@@ -33,6 +33,7 @@ export interface WordPressPost {
 }
 
 export interface WordPressPostRecord {
+  id: number
   postId: number
   pushedAt: Date
 }
@@ -50,6 +51,7 @@ export function apply(ctx: Context, config: Config) {
   ctx.logger.info('WordPress 推送插件已加载')
 
   ctx.model.extend('wordpress_posts', {
+    id: 'integer',
     postId: 'integer',
     pushedAt: 'timestamp'
   })
@@ -74,6 +76,7 @@ export function apply(ctx: Context, config: Config) {
 
   async function markPostAsPushed(postId: number) {
     await ctx.database.create('wordpress_posts', {
+      id: postId,
       postId,
       pushedAt: new Date()
     })
