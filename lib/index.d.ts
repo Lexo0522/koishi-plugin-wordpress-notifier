@@ -13,6 +13,7 @@ export interface Config {
     enableAutoPush: boolean;
     mentionAll: boolean;
     maxArticles: number;
+    superAdmins: string[];
 }
 export interface WordPressPost {
     id: number;

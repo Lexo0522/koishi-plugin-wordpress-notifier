@@ -15,6 +15,7 @@ export interface Config {
   enableAutoPush: boolean
   mentionAll: boolean
   maxArticles: number
+  superAdmins: string[]
 }
 
 export interface WordPressPost {
@@ -61,7 +62,8 @@ export const Config: Schema<Config> = Schema.object({
   targets: Schema.array(Schema.string()).description('推送目标（群号或 QQ 号）'),
   enableAutoPush: Schema.boolean().default(true).description('是否启用自动推送'),
   mentionAll: Schema.boolean().default(false).description('是否 @全体成员'),
-  maxArticles: Schema.number().default(5).description('每次最多推送的文章数量')
+  maxArticles: Schema.number().default(5).description('每次最多推送的文章数量'),
+  superAdmins: Schema.array(Schema.string()).default([]).description('超级管理员列表（QQ 号）')
 })
 
 export function apply(ctx: Context, config: Config) {
@@ -71,6 +73,9 @@ export function apply(ctx: Context, config: Config) {
     id: 'integer',
     postId: 'integer',
     pushedAt: 'timestamp'
+  }, {
+    primary: ['id'],
+    autoInc: true
   })
 
   async function fetchLatestPosts(): Promise<WordPressPost[]> {
@@ -217,8 +222,7 @@ export function apply(ctx: Context, config: Config) {
       
       let message = '👥 WordPress 站点用户列表：\n\n'
       for (const user of users) {
-        const roles = user.roles || []
-        message += `${user.id}. ${user.name}（${roles.join(', ') || '普通用户'}）\n`
+        message += `${user.id}. ${user.name}\n`
         message += `🔗 ${user.link}\n\n`
       }
       
@@ -241,8 +245,6 @@ export function apply(ctx: Context, config: Config) {
       let message = `👤 用户信息：\n\n`
       message += `ID: ${user.id}\n`
       message += `昵称: ${user.name}\n`
-      const roles = user.roles || []
-      message += `角色: ${roles.join(', ') || '普通用户'}\n`
       message += `个人主页: ${user.link}\n`
       if (user.description) {
         message += `简介: ${user.description.replace(/<[^>]*>/g, '')}\n`
@@ -287,6 +289,86 @@ export function apply(ctx: Context, config: Config) {
       return `@全体成员 已${config.mentionAll ? '开启' : '关闭'}`
     })
 
+  ctx.command('wordpress.set-url <url>', '修改 WordPress 站点地址（仅超级管理员可用）')
+    .action(async ({ session }, url) => {
+      const userId = session?.userId || 'unknown'
+      ctx.logger.info(`命令 wordpress.set-url 被调用，调用者：${userId}，新地址：${url}`)
+      
+      // 检查是否为超级管理员
+      if (!session?.userId || !config.superAdmins.includes(session.userId)) {
+        ctx.logger.warn(`用户 ${userId} 尝试修改站点地址，但不是超级管理员`)
+        return '你没有权限执行此命令'
+      }
+      
+      // 修改站点地址
+      config.wordpressUrl = url
+      ctx.logger.info(`站点地址已修改为：${url}`)
+      return `WordPress 站点地址已修改为：${url}`
+    })
+
+  ctx.command('wordpress.pushed', '查看已推送的文章列表')
+    .action(async () => {
+      ctx.logger.info('命令 wordpress.pushed 被调用')
+      
+      // 获取已推送的文章记录
+      const records = await ctx.database.get('wordpress_posts', {}, {
+        sort: {
+          pushedAt: 'desc'
+        }
+      })
+      if (records.length === 0) {
+        return '暂无已推送文章记录'
+      }
+      
+      let message = '📋 已推送文章列表（按时间倒序）：\n\n'
+      for (const record of records) {
+        message += `${record.id}. 文章 ID: ${record.postId}\n`
+        message += `📅 推送时间: ${new Date(record.pushedAt).toLocaleString('zh-CN')}\n\n`
+      }
+      
+      return message
+    })
+
+  ctx.command('wordpress.clean [days]', '清理指定天数前的推送记录（默认 30 天）')
+    .action(async ({ session }, days) => {
+      ctx.logger.info(`命令 wordpress.clean 被调用，天数：${days || '默认'}`)
+      
+      // 检查是否为超级管理员
+      const userId = session?.userId || 'unknown'
+      if (!session?.userId || !config.superAdmins.includes(session.userId)) {
+        ctx.logger.warn(`用户 ${userId} 尝试清理记录，但不是超级管理员`)
+        return '你没有权限执行此命令'
+      }
+      
+      // 设置默认天数
+      const daysToKeep = days ? parseInt(days) : 30
+      if (isNaN(daysToKeep) || daysToKeep <= 0) {
+        return '请输入有效的天数'
+      }
+      
+      // 计算清理时间点
+      const cutoffDate = new Date()
+      cutoffDate.setDate(cutoffDate.getDate() - daysToKeep)
+      
+      // 获取所有记录
+      const allRecords = await ctx.database.get('wordpress_posts', {})
+      
+      // 筛选需要删除的记录
+      const recordsToRemove = allRecords.filter(record => {
+        return new Date(record.pushedAt) < cutoffDate
+      })
+      
+      // 删除旧记录
+      let result = 0
+      for (const record of recordsToRemove) {
+        await ctx.database.remove('wordpress_posts', { id: record.id })
+        result++
+      }
+      
+      ctx.logger.info(`已清理 ${result} 条 ${daysToKeep} 天前的推送记录`)
+      return `已清理 ${result} 条 ${daysToKeep} 天前的推送记录`
+    })
+
   ctx.command('wordpress', 'WordPress 推送插件菜单')
     .action(() => {
       ctx.logger.info('命令 wordpress 被调用')
@@ -298,6 +380,9 @@ export function apply(ctx: Context, config: Config) {
 🔹 /wordpress.users - 查看站点用户列表
 🔹 /wordpress.user <id> - 查看特定用户信息
 🔹 /wordpress.push - 手动推送最新文章
+🔹 /wordpress.set-url <url> - 修改 WordPress 站点地址
+🔹 /wordpress.pushed - 查看已推送文章列表
+🔹 /wordpress.clean [days] - 清理旧推送记录
 🔹 /wordpress.toggle - 切换自动推送开关
 🔹 /wordpress.mention - 切换 @全体成员 开关
 

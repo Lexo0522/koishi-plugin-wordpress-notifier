@@ -55,6 +55,7 @@ plugins:
 | `enableAutoPush` | boolean | true | 是否启用自动推送 |
 | `mentionAll` | boolean | false | 是否在推送时 @全体成员 |
 | `maxArticles` | number | 5 | 每次最多推送的文章数量 |
+| `superAdmins` | array | [] | 超级管理员列表（QQ 号），拥有修改站点地址的权限 |
 
 ## 使用命令
 
@@ -121,6 +122,30 @@ plugins:
 ```
 
 显示指定 ID 用户的详细信息，包括用户 ID、昵称、角色、个人主页、注册时间和个人简介。
+
+### 修改 WordPress 站点地址
+
+```
+/wordpress.set-url <url>
+```
+
+修改 WordPress 站点地址，仅超级管理员可用。
+
+### 查看已推送文章列表
+
+```
+/wordpress.pushed
+```
+
+查看已推送的文章列表，按推送时间倒序排列，显示文章 ID 和推送时间。
+
+### 清理旧推送记录
+
+```
+/wordpress.clean [days]
+```
+
+清理指定天数前的推送记录，默认清理 30 天前的记录，仅超级管理员可用。
 
 ### 插件菜单
 
@@ -222,6 +247,14 @@ npm install
 ```
 
 ## 版本历史
+
+### 1.8.0 (2026-01-19)
+
+- ✨ 新增超级管理员功能，允许修改 WordPress 站点地址
+- ✅ 添加 `superAdmins` 配置项，支持指定超级管理员
+- ✅ 添加 `/wordpress.set-url <url>` 命令，仅超级管理员可用
+- 🐛 修复角色显示问题，移除不可靠的 roles 字段
+- 📝 更新 README.md 文档，添加超级管理员功能说明
 
 ### 1.7.1 (2026-01-19)
 
