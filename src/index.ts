@@ -42,8 +42,11 @@ export interface WordPressUser {
     '48': string
     '96': string
   }
-  registered_date: string
-  roles: string[]
+  registered_date?: string
+  roles?: string[]
+  slug?: string
+  url?: string
+  meta?: any[]
 }
 
 export interface WordPressPostRecord {
@@ -214,7 +217,8 @@ export function apply(ctx: Context, config: Config) {
       
       let message = '👥 WordPress 站点用户列表：\n\n'
       for (const user of users) {
-        message += `${user.id}. ${user.name}（${user.roles.join(', ')}）\n`
+        const roles = user.roles || []
+        message += `${user.id}. ${user.name}（${roles.join(', ') || '普通用户'}）\n`
         message += `🔗 ${user.link}\n\n`
       }
       
@@ -237,12 +241,15 @@ export function apply(ctx: Context, config: Config) {
       let message = `👤 用户信息：\n\n`
       message += `ID: ${user.id}\n`
       message += `昵称: ${user.name}\n`
-      message += `角色: ${user.roles.join(', ')}\n`
+      const roles = user.roles || []
+      message += `角色: ${roles.join(', ') || '普通用户'}\n`
       message += `个人主页: ${user.link}\n`
       if (user.description) {
         message += `简介: ${user.description.replace(/<[^>]*>/g, '')}\n`
       }
-      message += `注册时间: ${new Date(user.registered_date).toLocaleString('zh-CN')}\n`
+      if (user.registered_date) {
+        message += `注册时间: ${new Date(user.registered_date).toLocaleString('zh-CN')}\n`
+      }
       
       return message
     })

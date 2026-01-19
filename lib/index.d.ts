@@ -38,8 +38,11 @@ export interface WordPressUser {
         '48': string;
         '96': string;
     };
-    registered_date: string;
-    roles: string[];
+    registered_date?: string;
+    roles?: string[];
+    slug?: string;
+    url?: string;
+    meta?: any[];
 }
 export interface WordPressPostRecord {
     id: number;
