@@ -28,6 +28,19 @@ export interface WordPressPost {
     categories: number[];
     tags: number[];
 }
+export interface WordPressUser {
+    id: number;
+    name: string;
+    description: string;
+    link: string;
+    avatar_urls: {
+        '24': string;
+        '48': string;
+        '96': string;
+    };
+    registered_date: string;
+    roles: string[];
+}
 export interface WordPressPostRecord {
     id: number;
     postId: number;

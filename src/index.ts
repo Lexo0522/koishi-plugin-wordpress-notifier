@@ -32,6 +32,20 @@ export interface WordPressPost {
   tags: number[]
 }
 
+export interface WordPressUser {
+  id: number
+  name: string
+  description: string
+  link: string
+  avatar_urls: {
+    '24': string
+    '48': string
+    '96': string
+  }
+  registered_date: string
+  roles: string[]
+}
+
 export interface WordPressPostRecord {
   id: number
   postId: number
@@ -66,6 +80,31 @@ export function apply(ctx: Context, config: Config) {
     } catch (error) {
       ctx.logger.error(`获取 WordPress 文章失败: ${error}`)
       return []
+    }
+  }
+
+  async function fetchUsers(): Promise<WordPressUser[]> {
+    try {
+      const url = `${config.wordpressUrl}/wp-json/wp/v2/users`
+      ctx.logger.info(`正在获取用户信息: ${url}`)
+      const response = await ctx.http.get<WordPressUser[]>(url)
+      ctx.logger.info(`成功获取 ${response.length} 个用户`)
+      return response
+    } catch (error) {
+      ctx.logger.error(`获取 WordPress 用户信息失败: ${error}`)
+      return []
+    }
+  }
+
+  async function fetchUserById(userId: number): Promise<WordPressUser | null> {
+    try {
+      const url = `${config.wordpressUrl}/wp-json/wp/v2/users/${userId}`
+      ctx.logger.info(`正在获取用户信息: ${url}`)
+      const response = await ctx.http.get<WordPressUser>(url)
+      return response
+    } catch (error) {
+      ctx.logger.error(`获取 WordPress 用户信息失败: ${error}`)
+      return null
     }
   }
 
@@ -165,6 +204,49 @@ export function apply(ctx: Context, config: Config) {
       return message
     })
 
+  ctx.command('wordpress.users', '查看站点用户列表')
+    .action(async () => {
+      ctx.logger.info('命令 wordpress.users 被调用')
+      const users = await fetchUsers()
+      if (users.length === 0) {
+        return '暂无用户信息'
+      }
+      
+      let message = '👥 WordPress 站点用户列表：\n\n'
+      for (const user of users) {
+        message += `${user.id}. ${user.name}（${user.roles.join(', ')}）\n`
+        message += `🔗 ${user.link}\n\n`
+      }
+      
+      return message
+    })
+
+  ctx.command('wordpress.user <id>', '查看特定用户信息')
+    .action(async ({}, userId) => {
+      ctx.logger.info(`命令 wordpress.user 被调用，用户 ID：${userId}`)
+      const id = parseInt(userId)
+      if (isNaN(id)) {
+        return '请输入有效的用户 ID'
+      }
+      
+      const user = await fetchUserById(id)
+      if (!user) {
+        return `未找到 ID 为 ${id} 的用户`
+      }
+      
+      let message = `👤 用户信息：\n\n`
+      message += `ID: ${user.id}\n`
+      message += `昵称: ${user.name}\n`
+      message += `角色: ${user.roles.join(', ')}\n`
+      message += `个人主页: ${user.link}\n`
+      if (user.description) {
+        message += `简介: ${user.description.replace(/<[^>]*>/g, '')}\n`
+      }
+      message += `注册时间: ${new Date(user.registered_date).toLocaleString('zh-CN')}\n`
+      
+      return message
+    })
+
   ctx.command('wordpress.push', '手动推送最新文章')
     .action(async () => {
       ctx.logger.info('命令 wordpress.push 被调用')
@@ -206,6 +288,8 @@ export function apply(ctx: Context, config: Config) {
 🔹 /wordpress.status - 查看插件状态
 🔹 /wordpress.latest - 查看最新文章
 🔹 /wordpress.list - 查看文章列表
+🔹 /wordpress.users - 查看站点用户列表
+🔹 /wordpress.user <id> - 查看特定用户信息
 🔹 /wordpress.push - 手动推送最新文章
 🔹 /wordpress.toggle - 切换自动推送开关
 🔹 /wordpress.mention - 切换 @全体成员 开关
