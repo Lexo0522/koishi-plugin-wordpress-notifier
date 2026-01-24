@@ -4,6 +4,9 @@ export declare const name = "wordpress-notifier";
 declare module 'koishi' {
     interface Tables {
         wordpress_posts: WordPressPostRecord;
+        wordpress_post_updates: WordPressPostUpdateRecord;
+        wordpress_user_registrations: WordPressUserRegistrationRecord;
+        wordpress_group_pushes: WordPressGroupPushRecord;
     }
 }
 export interface Config {
@@ -11,6 +14,8 @@ export interface Config {
     interval: number;
     targets: string[];
     enableAutoPush: boolean;
+    enableUpdatePush: boolean;
+    enableUserPush: boolean;
     mentionAll: boolean;
     maxArticles: number;
 }
@@ -21,6 +26,7 @@ export interface WordPressPost {
     };
     link: string;
     date: string;
+    modified: string;
     excerpt: {
         rendered: string;
     };
@@ -31,23 +37,37 @@ export interface WordPressPost {
 export interface WordPressUser {
     id: number;
     name: string;
-    description: string;
-    link: string;
-    avatar_urls: {
-        '24': string;
-        '48': string;
-        '96': string;
-    };
-    registered_date?: string;
-    roles?: string[];
-    slug?: string;
-    url?: string;
-    meta?: any[];
+    slug: string;
+    date: string;
+    email: string;
+    roles: string[];
 }
 export interface WordPressPostRecord {
     id: number;
     postId: number;
     pushedAt: Date;
+}
+export interface WordPressPostUpdateRecord {
+    id: number;
+    postId: number;
+    lastModified: Date;
+    pushedAt: Date;
+}
+export interface WordPressUserRegistrationRecord {
+    id: number;
+    userId: number;
+    pushedAt: Date;
+}
+export interface WordPressGroupPushRecord {
+    id: number;
+    groupId: string;
+    postId: number;
+    pushedAt: Date;
+    isUpdate: boolean;
+}
+export interface WordPressNotification {
+    type: 'post' | 'update' | 'user';
+    data: any;
 }
 export declare const Config: Schema<Config>;
 export declare function apply(ctx: Context, config: Config): void;
