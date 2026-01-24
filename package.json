@@ -1,6 +1,6 @@
 {
   "name": "koishi-plugin-wordpress-notifier",
-  "version": "1.8.0",
+  "version": "1.8.2",
   "description": "WordPress 文章自动推送到 QQ",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
@@ -32,7 +32,10 @@
     "notifier",
     "qq"
   ],
-  "repository": "git+https://github.com/Lexo0522/koishi-plugin-wordpress-notifier.git",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Lexo0522/koishi-plugin-wordpress-notifier.git"
+  },
   "homepage": "https://github.com/Lexo0522/koishi-plugin-wordpress-notifier#readme",
   "bugs": {
     "url": "https://github.com/Lexo0522/koishi-plugin-wordpress-notifier/issues"
