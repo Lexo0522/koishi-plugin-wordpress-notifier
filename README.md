@@ -45,9 +45,27 @@ plugins:
     targets:
       - '2801323326'  # 推送目标（群号或 QQ 号）
     enableAutoPush: true  # 是否启用自动推送
+    enableUpdatePush: false  # 是否启用文章更新推送
+    enableUserPush: false  # 是否启用新用户注册推送
     mentionAll: false  # 是否 @全体成员
     maxArticles: 5  # 每次最多推送的文章数量
+    # 可选：WordPress API 认证配置
+    # 使用应用程序密码，更安全
+    # username: 'your-wordpress-username'
+    # applicationPassword: 'your-application-password'  # 例如：hGR2 sPFu Yncl xHc4 AvJq cUtB
 ```
+
+### 如何获取WordPress应用程序密码
+
+1. 登录WordPress后台
+2. 进入用户 > 个人资料
+3. 滚动到"应用程序密码"部分
+4. 输入应用程序名称（例如："Koishi 推送插件"）
+5. 点击"添加新应用程序密码"
+6. 复制生成的应用程序密码（例如：`hGR2 sPFu Yncl xHc4 AvJq cUtB`）
+7. 在插件配置中使用此密码，**无需删除空格**，插件会自动处理
+
+应用程序密码是WordPress生成的安全密码，适合API访问，比普通密码更安全，可以随时撤销，不会影响您的主密码。插件已不再支持普通密码，必须使用应用程序密码。
 
 ### 配置参数说明
 
@@ -61,6 +79,8 @@ plugins:
 | `enableUserPush` | boolean | false | 是否启用新用户注册推送 |
 | `mentionAll` | boolean | false | 是否在推送时 @全体成员 |
 | `maxArticles` | number | 5 | 每次最多推送的文章数量 |
+| `username` | string | 可选 | WordPress 用户名（用于 Basic 基础认证，与应用程序密码配合使用） |
+| `applicationPassword` | string | 可选 | WordPress 应用程序密码（用于 Basic 基础认证，例如：hGR2sPFuYnclxHc4AvJqcUtB） |
 
 ## 使用命令
 
@@ -264,6 +284,125 @@ npm install
 ```
 
 ## 版本历史
+
+### 2.0.9 (2026-01-25)
+
+- 🔧 增强用户注册日期处理，支持多种日期字段格式
+- ✅ 支持WordPress主题中添加的`user_registered`和`registered_date`字段
+- ✅ 在API请求中添加_fields参数，明确请求注册日期相关字段
+- ✅ 请求字段包括：id,name,slug,date,date_registered,registered_date,user_registered,created_at,registeredAt,email,roles,url,description,link,avatar_urls
+- ✅ 确保API返回完整的用户信息，包括注册日期
+- ✅ 优化日期字段优先级顺序，优先使用`registered_date`和`user_registered`字段
+
+### 如何获取用户注册日期
+
+WordPress REST API默认可能不会返回用户注册日期字段。您可以通过以下两种方式之一来启用：
+
+#### 方式 1：修改当前主题「函数文件（functions.php）」
+1. 登录 WordPress 后台 → 外观 → 主题文件编辑器 → 选择当前使用的主题 → 打开「函数文件（functions.php）」；
+2. 在文件末尾粘贴以下代码，点击「更新文件」保存：
+
+```php
+/** 
+ * 为WordPress REST API /wp/v2/users接口添加注册时间字段 
+ * 映射为registered_date，兼容代码中的字段读取逻辑 
+ */ 
+add_filter('rest_prepare_user', 'add_user_registered_date_to_rest', 10, 3); 
+function add_user_registered_date_to_rest($response, $user, $request) { 
+    // 获取WordPress原生注册时间（数据库字段user_registered，格式为Y-m-d H:i:s） 
+    $register_time = $user->user_registered; 
+    // 将注册时间添加到API返回数据中，同时保留原生字段和代码中使用的registered_date 
+    $response->data['user_registered'] = $register_time; // 原生字段名 
+    $response->data['registered_date'] = $register_time; // 代码中尝试读取的字段名 
+    return $response; 
+}
+```
+
+#### 方式 2：创建自定义插件（推荐，避免主题更换丢失代码）
+1. 新建一个文本文件，命名为 `add-rest-user-registered-date.php`（注意后缀为 .php）；
+2. 将以下代码粘贴到文件中（包含插件头注释，WordPress 可识别）：
+
+```php
+<?php 
+/** 
+ * 插件名称：REST API 用户注册时间字段扩展 
+ * 插件URI：https://www.rutua.cn/ 
+ * 描述：为/wp/v2/users接口添加注册时间（registered_date）字段，适配wordpress-notifier工具 
+ * 版本：1.0 
+ * 作者：kate522 
+ * 作者URI：https://www.rutua.cn/archives/author/kate522/ 
+ */ 
+
+// 过滤REST API用户响应，添加注册时间字段 
+add_filter('rest_prepare_user', 'add_user_registered_date_to_rest', 10, 3); 
+function add_user_registered_date_to_rest($response, $user, $request) { 
+    $register_time = $user->user_registered; 
+    $response->data['user_registered'] = $register_time; 
+    $response->data['registered_date'] = $register_time; 
+    return $response; 
+}
+```
+
+3. 将文件上传到 WordPress 服务器的 `wp-content/plugins/` 目录；
+4. 登录 WordPress 后台 → 插件 → 已安装插件 → 找到「REST API 用户注册时间字段扩展」→ 点击「启用」。
+
+添加上述代码后，插件将能够正确获取并显示用户注册日期。
+
+### 2.0.8 (2026-01-25)
+
+- 🔧 增强用户注册日期处理逻辑，尝试所有可能的日期字段
+- ✅ 添加调试日志，便于排查日期获取问题
+- ✅ 扩展WordPressUser接口，支持更多日期字段和未知字段
+- ✅ 按优先级遍历所有可能的日期字段，确保找到正确的注册日期
+- ✅ 添加详细的日志记录，便于调试和问题定位
+- ✅ 改进日期解析错误处理，确保不会显示"Invalid Date"
+
+### 2.0.7 (2026-01-25)
+
+- 🐛 修复用户注册日期显示"Invalid Date"的问题
+- ✅ 修正WordPressUser接口中的用户注册日期字段名，从`registered_date`改为`date_registered`
+- ✅ 更新日期处理逻辑，确保正确获取WordPress API返回的用户注册日期
+- ✅ 保留健壮的日期解析机制，避免显示"Invalid Date"
+
+### 2.0.6 (2026-01-25)
+
+- ✅ 不再采用WordPress普通密码，改用应用程序密码
+- ✅ 配置页面添加应用程序密码字段，移除普通密码字段
+- ✅ 优化认证逻辑，专门处理应用程序密码
+- ✅ 支持自动处理带有空格的应用程序密码
+- 🔧 更新了文档，详细说明如何使用应用程序密码
+- 🔧 提高了API访问的安全性
+
+### 2.0.5 (2026-01-25)
+
+- ✅ 支持WordPress应用程序密码（Application Password）
+- ✅ 自动处理带有空格的应用程序密码，无需手动删除空格
+- ✅ 优化认证逻辑，确保应用程序密码能正确工作
+- 🔧 更新了文档，详细说明如何获取和使用应用程序密码
+- 🔧 推荐使用应用程序密码，提高安全性
+
+### 2.0.4 (2026-01-25)
+
+- ✅ 修复插件配置页面无法添加WordPress账号和密码的问题
+- ✅ 在Schema配置中添加了username和password字段，支持在插件配置页面设置
+- ✅ 支持Basic基础认证，请求头携带认证信息
+- 🔧 优化了配置页面的用户体验
+- 🔧 更新了文档，说明如何在配置页面添加认证信息
+
+### 2.0.3 (2026-01-25)
+
+- ✨ 新增 WordPress API 认证支持
+- ✅ 支持配置 username 和 password 访问受保护的 API 端点
+- ✅ 特别是解决了 users 端点需要认证才能访问的问题
+- 🔧 更新了配置文档，添加了认证配置说明和示例
+- 🔧 优化了 HTTP 请求逻辑，支持基本认证
+
+### 2.0.2 (2026-01-25)
+
+- 🐛 修复每次重载时重新推送的问题
+- 🔧 优化推送去重机制，只使用群聊记录跟踪推送状态
+- 🔧 确保每个群聊只会收到一次相同的文章推送
+- 🔧 优化错误处理，确保插件核心功能正常工作
 
 ### 2.0.1 (2026-01-25)
 

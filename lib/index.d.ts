@@ -18,6 +18,8 @@ export interface Config {
     enableUserPush: boolean;
     mentionAll: boolean;
     maxArticles: number;
+    username?: string;
+    applicationPassword?: string;
 }
 export interface WordPressPost {
     id: number;
@@ -38,9 +40,15 @@ export interface WordPressUser {
     id: number;
     name: string;
     slug: string;
-    date: string;
+    date?: string;
+    date_registered?: string;
+    registered_date?: string;
+    user_registered?: string;
+    created_at?: string;
+    registeredAt?: string;
     email: string;
     roles: string[];
+    [key: string]: any;
 }
 export interface WordPressPostRecord {
     id: number;
