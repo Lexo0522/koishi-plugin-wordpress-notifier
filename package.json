@@ -1,6 +1,6 @@
 {
   "name": "koishi-plugin-wordpress-notifier",
-  "version": "2.7.0",
+  "version": "2.7.1",
   "description": "WordPress 文章自动推送到 QQ",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",

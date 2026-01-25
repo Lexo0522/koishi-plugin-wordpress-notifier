@@ -628,12 +628,11 @@ export function apply(ctx: Context, config: Config) {
         return '暂无文章'
       }
       
-      // 计算单篇文章的最大长度，确保每条消息不超过500字符
-      // 采用简化方案：只返回前3篇文章，确保消息长度在限制内
-      const limitedPosts = posts.slice(0, 3)
+      // 动态添加文章，确保消息长度不超过500字符
       let message = '📰 最新文章：\n'
+      let addedCount = 0
       
-      for (const post of limitedPosts) {
+      for (const post of posts) {
         const title = sanitizeContent(post.title.rendered)
         // 自定义日期格式，避免过长
         const date = new Date(post.date)
@@ -643,15 +642,24 @@ export function apply(ctx: Context, config: Config) {
         // 截断标题，避免单条过长
         const truncatedTitle = title.length > 40 ? title.substring(0, 37) + '...' : title
         
-        message += `${truncatedTitle}\n📅 ${formattedDate}\n🔗 ${encodedLink}\n`
+        // 单篇文章的消息片段
+        const postMessage = `${truncatedTitle}\n📅 ${formattedDate}\n🔗 ${encodedLink}\n`
+        
+        // 检查添加后是否超过500字符，如果超过则停止添加
+        if (message.length + postMessage.length > 500) {
+          break
+        }
+        
+        message += postMessage
+        addedCount++
       }
       
-      // 如果有更多文章，添加提示
-      if (posts.length > 3) {
-        message += `... 共 ${posts.length} 篇文章，只显示前 3 篇`
+      // 如果有更多文章未显示，添加提示
+      if (addedCount < posts.length) {
+        message += `... 共 ${posts.length} 篇文章，显示前 ${addedCount} 篇`
       }
       
-      ctx.logger.info(`准备返回消息，长度: ${message.length}`)
+      ctx.logger.info(`准备返回消息，长度: ${message.length}，显示 ${addedCount}/${posts.length} 篇文章`)
       return message
     })
 
