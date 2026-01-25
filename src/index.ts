@@ -512,10 +512,10 @@ export function apply(ctx: Context, config: Config) {
                 // 直接使用原始目标字符串，不进行数字转换，避免丢失平台前缀等信息
                 const stringTarget = target
                 
-                const segments = formatPostMessage(post, true, false)
+                const message = formatPostMessage(post, true, false)
                 
                 ctx.logger.info(`准备推送新文章到目标: ${stringTarget}`)
-                await bot.sendMessage(stringTarget, segments)
+                await bot.sendMessage(stringTarget, message)
                 ctx.logger.info(`已推送新文章到 ${stringTarget}: ${post.title.rendered}`)
               } catch (error) {
                 ctx.logger.error(`推送新文章到 ${target} 失败: ${error}`)
@@ -551,10 +551,10 @@ export function apply(ctx: Context, config: Config) {
                 ctx.logger.info(`正在处理目标: ${target}`)
                 
                 const stringTarget = target
-                const segments = formatPostMessage(post, true, true)
+                const message = formatPostMessage(post, true, true)
                 
                 ctx.logger.info(`准备推送文章更新到目标: ${stringTarget}`)
-                await bot.sendMessage(stringTarget, segments)
+                await bot.sendMessage(stringTarget, message)
                 ctx.logger.info(`已推送文章更新到 ${stringTarget}: ${post.title.rendered}`)
               } catch (error) {
                 ctx.logger.error(`推送文章更新到 ${target} 失败: ${error}`)
@@ -583,10 +583,10 @@ export function apply(ctx: Context, config: Config) {
                 // 直接使用原始目标字符串，与新文章推送逻辑保持一致
                 const stringTarget = target
                 
-                const segments = formatUserMessage(user, true)
+                const message = formatUserMessage(user, true)
                 
                 ctx.logger.info(`准备推送新用户到目标: ${stringTarget}`)
-                await bot.sendMessage(stringTarget, segments)
+                await bot.sendMessage(stringTarget, message)
                 ctx.logger.info(`已推送新用户到 ${stringTarget}: ${user.name}`)
               } catch (error) {
                 ctx.logger.error(`推送新用户到 ${target} 失败: ${error}`)
