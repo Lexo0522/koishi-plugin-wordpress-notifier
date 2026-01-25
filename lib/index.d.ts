@@ -3,10 +3,8 @@ export declare const inject: string[];
 export declare const name = "wordpress-notifier";
 declare module 'koishi' {
     interface Tables {
-        wordpress_posts: WordPressPostRecord;
         wordpress_post_updates: WordPressPostUpdateRecord;
         wordpress_user_registrations: WordPressUserRegistrationRecord;
-        wordpress_group_pushes: WordPressGroupPushRecord;
     }
 }
 export interface Config {
@@ -20,6 +18,7 @@ export interface Config {
     maxArticles: number;
     username?: string;
     applicationPassword?: string;
+    superAdmins: string[];
 }
 export interface WordPressPost {
     id: number;
@@ -50,11 +49,6 @@ export interface WordPressUser {
     roles: string[];
     [key: string]: any;
 }
-export interface WordPressPostRecord {
-    id: number;
-    postId: number;
-    pushedAt: Date;
-}
 export interface WordPressPostUpdateRecord {
     id: number;
     postId: number;
@@ -65,13 +59,6 @@ export interface WordPressUserRegistrationRecord {
     id: number;
     userId: number;
     pushedAt: Date;
-}
-export interface WordPressGroupPushRecord {
-    id: number;
-    groupId: string;
-    postId: number;
-    pushedAt: Date;
-    isUpdate: boolean;
 }
 export interface WordPressNotification {
     type: 'post' | 'update' | 'user';

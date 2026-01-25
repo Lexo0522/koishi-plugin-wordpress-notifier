@@ -4,10 +4,8 @@ export const name = 'wordpress-notifier'
 
 declare module 'koishi' {
   interface Tables {
-    wordpress_posts: WordPressPostRecord
     wordpress_post_updates: WordPressPostUpdateRecord
     wordpress_user_registrations: WordPressUserRegistrationRecord
-    wordpress_group_pushes: WordPressGroupPushRecord
   }
 }
 
@@ -22,6 +20,7 @@ export interface Config {
   maxArticles: number
   username?: string
   applicationPassword?: string
+  superAdmins: string[]
 }
 
 export interface WordPressPost {
@@ -55,12 +54,6 @@ export interface WordPressUser {
   [key: string]: any // 添加索引签名，允许接收未知字段
 }
 
-export interface WordPressPostRecord {
-  id: number
-  postId: number
-  pushedAt: Date
-}
-
 export interface WordPressPostUpdateRecord {
   id: number
   postId: number
@@ -72,14 +65,6 @@ export interface WordPressUserRegistrationRecord {
   id: number
   userId: number
   pushedAt: Date
-}
-
-export interface WordPressGroupPushRecord {
-  id: number
-  groupId: string
-  postId: number
-  pushedAt: Date
-  isUpdate: boolean
 }
 
 export interface WordPressNotification {
@@ -97,28 +82,23 @@ export const Config: Schema<Config> = Schema.object({
   mentionAll: Schema.boolean().default(false).description('是否 @全体成员'),
   maxArticles: Schema.number().default(5).description('每次最多推送的文章数量'),
   username: Schema.string().default('').description('WordPress 用户名（用于 Basic 认证，与应用程序密码配合使用）'),
-  applicationPassword: Schema.string().default('').description('WordPress 应用程序密码（用于 Basic 认证，例如：hGR2sPFuYnclxHc4AvJqcUtB）')
+  applicationPassword: Schema.string().default('').description('WordPress 应用程序密码（用于 Basic 认证，例如：hGR2sPFuYnclxHc4AvJq cUtB）'),
+  superAdmins: Schema.array(Schema.string()).default([]).description('超级管理员 QQ 号列表')
 })
 
 export function apply(ctx: Context, config: Config) {
   ctx.logger.info('WordPress 推送插件已加载')
 
-  ctx.model.extend('wordpress_posts', {
-    id: 'integer',
-    postId: 'integer',
-    pushedAt: 'timestamp'
-  }, {
-    primary: ['id'],
-    autoInc: true
-  })
-
+  // 修复 MySQL 自增主键问题，使用正确的模型配置
+  // 关键修复：将 primary 从数组 ['id'] 改为字符串 'id'
+  // 当 primary 为字符串且等于当前字段名时，Koishi 会自动为 MySQL 添加 AUTO_INCREMENT 属性
   ctx.model.extend('wordpress_post_updates', {
     id: 'integer',
     postId: 'integer',
     lastModified: 'timestamp',
     pushedAt: 'timestamp'
   }, {
-    primary: ['id'],
+    primary: 'id',
     autoInc: true,
     unique: ['postId']
   })
@@ -128,22 +108,42 @@ export function apply(ctx: Context, config: Config) {
     userId: 'integer',
     pushedAt: 'timestamp'
   }, {
-    primary: ['id'],
+    primary: 'id',
     autoInc: true,
     unique: ['userId']
   })
 
-  ctx.model.extend('wordpress_group_pushes', {
-    id: 'integer',
-    groupId: 'string',
-    postId: 'integer',
-    pushedAt: 'timestamp',
-    isUpdate: 'boolean'
-  }, {
-    primary: ['id'],
-    autoInc: true,
-    unique: ['groupId', 'postId']
+  ctx.logger.info('数据库表配置完成，autoInc: true 已启用，确保插入操作不手动指定 id 字段')
+
+  // 为所有数据库操作添加详细日志，便于诊断自增主键问题
+  ctx.on('ready', async () => {
+    ctx.logger.info('WordPress 推送插件已就绪，开始初始化推送任务')
+    ctx.logger.info('数据库表配置：')
+    ctx.logger.info('wordpress_post_updates: id 字段设置为 autoInc: true')
+    ctx.logger.info('wordpress_user_registrations: id 字段设置为 autoInc: true')
+    ctx.logger.info('所有群聊共用一个文章标记，不再区分群聊')
+    
+    // 检查并修复数据库表结构问题
+    await checkAndFixTableStructure()
+    
+    // 执行初始推送
+    await pushNewPosts()
   })
+  
+  // 检查数据库表结构的函数
+  async function checkAndFixTableStructure() {
+    try {
+      ctx.logger.info('开始检查数据库表结构...')
+      ctx.logger.info('所有群聊现在共用一个文章标记，不再区分群聊')
+      ctx.logger.info('wordpress_group_pushes 表已不再使用，已移除相关功能')
+      ctx.logger.info('表结构检查和修复完成')
+      
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      ctx.logger.error(`检查表结构失败：${errorMessage}`)
+      ctx.logger.error(`错误栈：${error instanceof Error ? error.stack : '无'}`)
+    }
+  }
 
   async function fetchLatestPosts(): Promise<WordPressPost[]> {
     try {
@@ -238,52 +238,96 @@ export function apply(ctx: Context, config: Config) {
   }
 
   async function isUserPushed(userId: number): Promise<boolean> {
-    const record = await ctx.database.get('wordpress_user_registrations', { userId })
-    return record.length > 0
+    try {
+      ctx.logger.info(`检查用户是否已推送，用户 ID: ${userId}`)
+      const record = await ctx.database.get('wordpress_user_registrations', { userId })
+      const result = record.length > 0
+      ctx.logger.info(`检查结果：用户 ${userId} 已推送：${result ? '是' : '否'}`)
+      return result
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      ctx.logger.error(`检查用户推送记录失败：${errorMessage}`)
+      ctx.logger.error(`错误栈：${error instanceof Error ? error.stack : '无'}`)
+      // 发生错误时，默认返回 false，避免阻塞推送流程
+      return false
+    }
   }
 
   async function getPostUpdateRecord(postId: number): Promise<WordPressPostUpdateRecord | null> {
-    const records = await ctx.database.get('wordpress_post_updates', { postId })
-    return records.length > 0 ? records[0] : null
-  }
-
-  async function isGroupPushed(groupId: string, postId: number): Promise<boolean> {
-    const record = await ctx.database.get('wordpress_group_pushes', { groupId, postId })
-    return record.length > 0
+    try {
+      ctx.logger.info(`获取文章更新记录，文章 ID: ${postId}`)
+      const records = await ctx.database.get('wordpress_post_updates', { postId })
+      const result = records.length > 0 ? records[0] : null
+      ctx.logger.info(`获取结果：文章 ${postId} 更新记录：${result ? '找到' : '未找到'}`)
+      return result
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      ctx.logger.error(`获取文章更新记录失败：${errorMessage}`)
+      ctx.logger.error(`错误栈：${error instanceof Error ? error.stack : '无'}`)
+      // 发生错误时，返回 null，避免阻塞推送流程
+      return null
+    }
   }
 
   async function markUserAsPushed(userId: number) {
-    await ctx.database.create('wordpress_user_registrations', {
-      userId,
-      pushedAt: new Date()
-    })
+    try {
+      ctx.logger.info(`开始标记用户已推送，用户 ID: ${userId}`)
+      
+      // 创建新记录，不手动指定id，让数据库自动生成
+      const newRecord = {
+        userId,
+        pushedAt: new Date()
+      }
+      
+      ctx.logger.info(`准备创建用户推送记录：${JSON.stringify(newRecord)}`)
+      await ctx.database.create('wordpress_user_registrations', newRecord)
+      ctx.logger.info(`已成功标记用户 ${userId} 为已推送`)
+      
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      if (errorMessage.includes('UNIQUE constraint failed')) {
+        ctx.logger.warn(`用户推送记录已存在，跳过重复插入：用户 ${userId}`)
+        ctx.logger.warn(`完整错误信息：${errorMessage}`)
+      } else {
+        ctx.logger.error(`标记用户推送记录失败：${errorMessage}`)
+        ctx.logger.error(`错误栈：${error instanceof Error ? error.stack : '无'}`)
+        ctx.logger.error(`插入参数：userId=${userId}`)
+        // 非约束冲突错误，不抛出，确保插件继续运行
+      }
+    }
   }
 
   async function updatePostUpdateRecord(postId: number, modifiedDate: Date) {
-    const record = await getPostUpdateRecord(postId)
-    if (record) {
-      // Koishi database API 不支持 update 方法，使用 remove + create 代替
-      await ctx.database.remove('wordpress_post_updates', { postId })
+    try {
+      ctx.logger.info(`开始更新文章更新记录，文章 ID: ${postId}，修改时间: ${modifiedDate}`)
+      
+      const record = await getPostUpdateRecord(postId)
+      
+      if (record) {
+        ctx.logger.info(`发现现有记录，文章 ID: ${postId}，上次修改时间: ${record.lastModified}`)
+        // Koishi database API 不支持 update 方法，使用 remove + create 代替
+        await ctx.database.remove('wordpress_post_updates', { postId })
+        ctx.logger.info(`已删除旧记录，文章 ID: ${postId}`)
+      }
+      
+      // 创建新记录
+      const newRecord = {
+        postId,
+        lastModified: modifiedDate,
+        pushedAt: new Date()
+      }
+      
+      ctx.logger.info(`准备创建新记录，文章 ID: ${postId}，记录内容: ${JSON.stringify(newRecord)}`)
+      await ctx.database.create('wordpress_post_updates', newRecord)
+      ctx.logger.info(`已成功更新文章更新记录，文章 ID: ${postId}`)
+      
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      ctx.logger.error(`更新文章更新记录失败，文章 ID: ${postId}`)
+      ctx.logger.error(`错误信息: ${errorMessage}`)
+      ctx.logger.error(`错误栈: ${error instanceof Error ? error.stack : '无'}`)
+      throw error
     }
-    await ctx.database.create('wordpress_post_updates', {
-      postId,
-      lastModified: modifiedDate,
-      pushedAt: new Date()
-    })
-  }
-
-  async function markGroupAsPushed(groupId: string, postId: number, isUpdate: boolean) {
-    const record = await ctx.database.get('wordpress_group_pushes', { groupId, postId })
-    if (record) {
-      // Koishi database API 不支持 update 方法，使用 remove + create 代替
-      await ctx.database.remove('wordpress_group_pushes', { groupId, postId })
-    }
-    await ctx.database.create('wordpress_group_pushes', {
-      groupId,
-      postId,
-      pushedAt: new Date(),
-      isUpdate
-    })
   }
 
   function formatPostMessage(post: WordPressPost, mention: boolean = false, isUpdate: boolean = false) {
@@ -297,23 +341,29 @@ export function apply(ctx: Context, config: Config) {
     }
     
     const title = sanitizeText(post.title.rendered)
+    // 强制截断摘要为 100 字符，QQ 官方 bot 限制更严格
     const excerpt = sanitizeText(post.excerpt.rendered).substring(0, 100)
     const date = new Date(post.date).toLocaleString('zh-CN')
     const modifiedDate = new Date(post.modified).toLocaleString('zh-CN')
     
-    const segments = []
+    // 构建 @全体成员 文本（适配 QQ 官方 bot 和其他适配器）
+    const atAllText = mention && config.mentionAll ? '@全体成员 ' : ''
     
-    if (mention && config.mentionAll) {
-      segments.push(h.at('all'))
+    // 使用 QQ 官方 bot 兼容格式，简化分隔符
+    const messageType = isUpdate ? '📝 文章更新' : '📝 新文章'
+    const messageDate = isUpdate ? `📅 发布: ${date} | 更新: ${modifiedDate}` : `📅 ${date}`
+    
+    // 构建核心消息内容，确保格式简单清晰
+    let message = `${atAllText}${messageType}\n${messageDate}\n📄 ${excerpt}...\n🔗 ${post.link}`
+    
+    // 强制截断整体消息为 350 字符，QQ 官方 bot 限制更严格
+    if (message.length > 350) {
+      message = message.substring(0, 347) + '...'
+      ctx.logger.warn(`文章消息超长，已截断，文章 ID: ${post.id}`)
     }
     
-    // 合并为单段文本，提升适配器兼容性
-    const messageType = isUpdate ? '📝 文章更新' : '📝 新文章'
-    const messageDate = isUpdate ? `📅 发布: ${date}\n� 更新: ${modifiedDate}` : `� ${date}`
-    const message = `${messageType}\n${messageDate}\n📄 ${excerpt}...\n🔗 ${post.link}`
-    segments.push(h.text(message))
-    
-    return segments
+    // 返回单段文本，使用 h.text() 封装，确保兼容性
+    return h.text(message)
   }
 
   function formatUserMessage(user: WordPressUser, mention: boolean = false) {
@@ -385,36 +435,46 @@ export function apply(ctx: Context, config: Config) {
       registerDate = '未知时间'
     }
     
-    const segments = []
+    // 构建 @全体成员 文本（适配 QQ 官方 bot 和其他适配器）
+    const atAllText = mention && config.mentionAll ? '@全体成员 ' : ''
     
-    if (mention && config.mentionAll) {
-      segments.push(h.at('all'))
+    // 使用 QQ 官方 bot 兼容格式，简化分隔符
+    let message = `${atAllText}👤 新用户注册\n📛 用户名: ${username}\n📅 注册时间: ${registerDate}`
+    
+    // 强制截断整体消息为 300 字符，QQ 官方 bot 限制更严格
+    if (message.length > 300) {
+      message = message.substring(0, 297) + '...'
+      ctx.logger.warn(`用户消息超长，已截断，用户 ID: ${user.id}`)
     }
     
-    // 合并为单段文本，提升适配器兼容性
-    const message = `👤 新用户注册\n📛 用户名: ${username}\n📅 注册时间: ${registerDate}`
-    segments.push(h.text(message))
-    
-    return segments
+    // 返回单段文本，使用 h.text() 封装，确保兼容性
+    return h.text(message)
   }
 
   async function pushNewPosts() {
-    // 健壮获取 QQ Bot 实例，兼容多种适配器
+    // 健壮获取 QQ Bot 实例，兼容多种适配器，优先选择 QQ 官方 bot
     const getValidBot = () => {
-      // 支持的 QQ 相关适配器列表
+      // 支持的 QQ 相关适配器列表，'qq' 为 QQ 官方 bot
       const qqAdapters = ['qq', 'onebot', 'milky', 'satori']
       
       // ctx.bots 是对象，需转换为数组后遍历
       const botList = Object.values(ctx.bots)
       
-      // 优先选择活跃的 QQ 适配器 Bot
+      // 1. 优先选择 QQ 官方 bot（platform === 'qq'）
+      for (const bot of botList) {
+        if (bot.platform === 'qq') {
+          return bot
+        }
+      }
+      
+      // 2. 其次选择其他 QQ 适配器 Bot
       for (const bot of botList) {
         if (bot.platform && qqAdapters.includes(bot.platform)) {
           return bot
         }
       }
       
-      // 退而求其次，返回第一个可用 Bot
+      // 3. 最后选择任何可用 Bot
       return botList[0]
     }
 
@@ -424,40 +484,50 @@ export function apply(ctx: Context, config: Config) {
       return
     }
 
-    ctx.logger.info(`使用 bot ${bot.platform}:${bot.selfId} 进行推送`)
+    // 修复 Bot 标识 undefined 问题
+    const botId = bot.selfId || 'unknown'
+    ctx.logger.info(`使用 bot ${bot.platform}:${botId} 进行推送`)
 
     // 推送新文章
     if (config.enableAutoPush) {
       const posts = await fetchLatestPosts()
+      ctx.logger.info(`开始检查 ${posts.length} 篇文章是否需要推送`)
+      
       if (posts.length > 0) {
         for (const post of posts) {
-          for (const target of config.targets) {
-            try {
-              // 验证目标格式，确保是有效的数字字符串
-              const numericTarget = Number(target)
-              if (isNaN(numericTarget)) {
-                ctx.logger.error(`无效的目标 ${target}，必须是数字类型`)
-                continue
-              }
-              
-              // 保持字符串类型，但确保内容是有效的数字格式
-              const stringTarget = numericTarget.toString()
-              
-              // 检查该群是否已推送过此文章
-              if (!(await isGroupPushed(stringTarget, post.id))) {
+          ctx.logger.info(`正在处理文章: ${post.id} - ${post.title.rendered}`)
+          ctx.logger.info(`文章 ID: ${post.id}, 发布时间: ${post.date}, 修改时间: ${post.modified}`)
+          
+          // 检查文章是否已推送过（所有群聊共用一个标记）
+          const postRecord = await getPostUpdateRecord(post.id)
+          const hasPushed = !!postRecord
+          ctx.logger.info(`检查结果: 文章 ${post.id} 是否已推送：${hasPushed ? '是' : '否'}`)
+          
+          if (!hasPushed) {
+            // 推送到所有目标群聊
+            for (const target of config.targets) {
+              try {
+                ctx.logger.info(`正在处理目标: ${target}`)
+                
+                // 直接使用原始目标字符串，不进行数字转换，避免丢失平台前缀等信息
+                const stringTarget = target
+                
                 const segments = formatPostMessage(post, true, false)
                 
                 ctx.logger.info(`准备推送新文章到目标: ${stringTarget}`)
                 await bot.sendMessage(stringTarget, segments)
                 ctx.logger.info(`已推送新文章到 ${stringTarget}: ${post.title.rendered}`)
-                
-                // 标记该群已推送此文章
-                await markGroupAsPushed(stringTarget, post.id, false)
+              } catch (error) {
+                ctx.logger.error(`推送新文章到 ${target} 失败: ${error}`)
+                ctx.logger.error(`错误详情: ${JSON.stringify(error)}`)
               }
-            } catch (error) {
-              ctx.logger.error(`推送新文章到 ${target} 失败: ${error}`)
-              ctx.logger.error(`错误详情: ${JSON.stringify(error)}`)
             }
+            
+            // 标记文章已推送（所有群聊共用一个标记）
+            await updatePostUpdateRecord(post.id, new Date(post.modified))
+            ctx.logger.info(`已标记文章 ${post.id} 为已推送，所有群聊将不再推送此文章`)
+          } else {
+            ctx.logger.info(`跳过推送: 文章 ${post.id} 已推送过，所有群聊将不再推送`)
           }
         }
       }
@@ -472,38 +542,29 @@ export function apply(ctx: Context, config: Config) {
           const postModifiedDate = new Date(post.modified)
           
           // 检查文章是否有更新
-          if (!updateRecord || postModifiedDate > new Date(updateRecord.lastModified)) {
+          if (updateRecord && postModifiedDate > new Date(updateRecord.lastModified)) {
+            ctx.logger.info(`文章 ${post.id} 有更新，准备推送更新通知`)
+            
+            // 推送到所有目标群聊
             for (const target of config.targets) {
               try {
-                // 验证目标格式，确保是有效的数字字符串
-                const numericTarget = Number(target)
-                if (isNaN(numericTarget)) {
-                  ctx.logger.error(`无效的目标 ${target}，必须是数字类型`)
-                  continue
-                }
+                ctx.logger.info(`正在处理目标: ${target}`)
                 
-                // 保持字符串类型，但确保内容是有效的数字格式
-                const stringTarget = numericTarget.toString()
+                const stringTarget = target
+                const segments = formatPostMessage(post, true, true)
                 
-                // 检查该群是否已推送过此文章
-                if (await isGroupPushed(stringTarget, post.id)) {
-                  const segments = formatPostMessage(post, true, true)
-                  
-                  ctx.logger.info(`准备推送文章更新到目标: ${stringTarget}`)
-                  await bot.sendMessage(stringTarget, segments)
-                  ctx.logger.info(`已推送文章更新到 ${stringTarget}: ${post.title.rendered}`)
-                  
-                  // 更新该群推送记录
-                  await markGroupAsPushed(stringTarget, post.id, true)
-                }
+                ctx.logger.info(`准备推送文章更新到目标: ${stringTarget}`)
+                await bot.sendMessage(stringTarget, segments)
+                ctx.logger.info(`已推送文章更新到 ${stringTarget}: ${post.title.rendered}`)
               } catch (error) {
                 ctx.logger.error(`推送文章更新到 ${target} 失败: ${error}`)
                 ctx.logger.error(`错误详情: ${JSON.stringify(error)}`)
               }
             }
             
-            // 更新文章更新记录
+            // 更新文章更新记录（所有群聊共用一个标记）
             await updatePostUpdateRecord(post.id, postModifiedDate)
+            ctx.logger.info(`已更新文章 ${post.id} 的推送记录，所有群聊将使用此更新时间作为新的推送基准`)
           }
         }
       }
@@ -517,15 +578,10 @@ export function apply(ctx: Context, config: Config) {
           if (!(await isUserPushed(user.id))) {
             for (const target of config.targets) {
               try {
-                // 验证目标格式，确保是有效的数字字符串
-                const numericTarget = Number(target)
-                if (isNaN(numericTarget)) {
-                  ctx.logger.error(`无效的目标 ${target}，必须是数字类型`)
-                  continue
-                }
+                ctx.logger.info(`正在处理目标: ${target}`)
                 
-                // 保持字符串类型，但确保内容是有效的数字格式
-                const stringTarget = numericTarget.toString()
+                // 直接使用原始目标字符串，与新文章推送逻辑保持一致
+                const stringTarget = target
                 
                 const segments = formatUserMessage(user, true)
                 
@@ -552,7 +608,7 @@ export function apply(ctx: Context, config: Config) {
       const posts = await fetchLatestPosts()
       if (posts.length === 0) {
         ctx.logger.info('没有找到文章')
-        return '暂无文章'
+        return h.text('暂无文章')
       }
       
       let message = '📰 最新文章：\n\n'
@@ -563,7 +619,7 @@ export function apply(ctx: Context, config: Config) {
       }
       
       ctx.logger.info(`准备返回消息，长度: ${message.length}`)
-      return message
+      return h.text(message)
     })
 
   ctx.command('wordpress.list', '查看文章列表')
@@ -571,7 +627,7 @@ export function apply(ctx: Context, config: Config) {
       ctx.logger.info('命令 wordpress.list 被调用')
       const posts = await fetchLatestPosts()
       if (posts.length === 0) {
-        return '暂无文章'
+        return h.text('暂无文章')
       }
       
       let message = '📚 文章列表：\n\n'
@@ -580,14 +636,14 @@ export function apply(ctx: Context, config: Config) {
         message += `${post.id}. ${title}\n`
       }
       
-      return message
+      return h.text(message)
     })
 
   ctx.command('wordpress.push', '手动推送最新文章')
     .action(async () => {
       ctx.logger.info('命令 wordpress.push 被调用')
       await pushNewPosts()
-      return '已检查并推送最新文章'
+      return h.text('已检查并推送最新文章')
     })
 
   ctx.command('wordpress.status', '查看插件状态')
@@ -600,87 +656,202 @@ export function apply(ctx: Context, config: Config) {
       // 推送目标仅显示本群
       const targetText = `🎯 推送目标: ${currentGroup}`
       
-      return `📊 WordPress 推送插件状态：
-🌐 网站地址: ${config.wordpressUrl}
-⏰ 检查间隔: ${config.interval / 1000} 秒
-${targetText}
-🔔 自动推送: ${config.enableAutoPush ? '开启' : '关闭'}
-🔄 更新推送: ${config.enableUpdatePush ? '开启' : '关闭'}
-👤 用户推送: ${config.enableUserPush ? '开启' : '关闭'}
-📢 @全体成员: ${config.mentionAll ? '开启' : '关闭'}
-📝 最多推送: ${config.maxArticles} 篇`
+      // 使用数组拼接消息，便于控制格式和长度
+      const messageParts = [
+        '📊 WordPress 插件状态',
+        `🌐 站点: ${config.wordpressUrl}`,
+        `⏰ 间隔: ${config.interval / 1000} 秒`,
+        targetText,
+        `🔔 自动推送: ${config.enableAutoPush ? '开启' : '关闭'}`,
+        `🔄 更新推送: ${config.enableUpdatePush ? '开启' : '关闭'}`,
+        `👤 用户推送: ${config.enableUserPush ? '开启' : '关闭'}`,
+        `📢 @全体: ${config.mentionAll ? '开启' : '关闭'}`,
+        `📝 最多推送: ${config.maxArticles} 篇`
+      ]
+      
+      // 合并为单行文本，统一换行符
+      let message = messageParts.join('\n')
+      
+      // 长度验证，超过 450 字符则精简
+      if (message.length > 450) {
+        ctx.logger.warn(`消息过长，长度: ${message.length}，将进行精简`)
+        message = messageParts.slice(0, 5).join('\n') + '\n... 更多配置请查看完整状态'
+      }
+      
+      ctx.logger.info(`准备返回消息，长度: ${message.length}`)
+      // 使用 h.text() 封装消息，确保兼容性
+      return h.text(message)
     })
 
   ctx.command('wordpress.toggle-update', '切换文章更新推送开关')
     .action(async ({ session }) => {
+      // 检查是否为超级管理员
+      if (!session || !session.userId) {
+        ctx.logger.warn('匿名用户尝试调用 wordpress.toggle-update 命令')
+        return h.text('您不是超级管理员，无法执行此命令')
+      }
+      
+      // 获取当前用户的QQ号（兼容不同平台格式，如 onebot:123456789 -> 123456789）
+      const userId = session.userId.replace(/^\w+:/, '')
+      
+      // 检查当前用户是否在插件配置的超级管理员列表中
+      if (!config.superAdmins || !config.superAdmins.includes(userId)) {
+        ctx.logger.warn(`非超级管理员 ${userId} 尝试调用 wordpress.toggle-update 命令`)
+        return h.text('您不是超级管理员，无法执行此命令')
+      }
+      
       ctx.logger.info('命令 wordpress.toggle-update 被调用')
       config.enableUpdatePush = !config.enableUpdatePush
-      return `文章更新推送已${config.enableUpdatePush ? '开启' : '关闭'}`
+      return h.text(`文章更新推送已${config.enableUpdatePush ? '开启' : '关闭'}`)
     })
 
   ctx.command('wordpress.toggle-user', '切换新用户注册推送开关')
     .action(async ({ session }) => {
+      // 检查是否为超级管理员
+      if (!session || !session.userId) {
+        ctx.logger.warn('匿名用户尝试调用 wordpress.toggle-user 命令')
+        return h.text('您不是超级管理员，无法执行此命令')
+      }
+      
+      // 获取当前用户的QQ号（兼容不同平台格式，如 onebot:123456789 -> 123456789）
+      const userId = session.userId.replace(/^\w+:/, '')
+      
+      // 检查当前用户是否在插件配置的超级管理员列表中
+      if (!config.superAdmins || !config.superAdmins.includes(userId)) {
+        ctx.logger.warn(`非超级管理员 ${userId} 尝试调用 wordpress.toggle-user 命令`)
+        return h.text('您不是超级管理员，无法执行此命令')
+      }
+      
       ctx.logger.info('命令 wordpress.toggle-user 被调用')
       config.enableUserPush = !config.enableUserPush
-      return `新用户注册推送已${config.enableUserPush ? '开启' : '关闭'}`
+      return h.text(`新用户注册推送已${config.enableUserPush ? '开启' : '关闭'}`)
     })
 
   ctx.command('wordpress.toggle', '切换自动推送开关')
     .action(async ({ session }) => {
+      // 检查是否为超级管理员
+      if (!session || !session.userId) {
+        ctx.logger.warn('匿名用户尝试调用 wordpress.toggle 命令')
+        return h.text('您不是超级管理员，无法执行此命令')
+      }
+      
+      // 获取当前用户的QQ号（兼容不同平台格式，如 onebot:123456789 -> 123456789）
+      const userId = session.userId.replace(/^\w+:/, '')
+      
+      // 检查当前用户是否在插件配置的超级管理员列表中
+      if (!config.superAdmins || !config.superAdmins.includes(userId)) {
+        ctx.logger.warn(`非超级管理员 ${userId} 尝试调用 wordpress.toggle 命令`)
+        return h.text('您不是超级管理员，无法执行此命令')
+      }
+      
       ctx.logger.info('命令 wordpress.toggle 被调用')
       config.enableAutoPush = !config.enableAutoPush
-      return `自动推送已${config.enableAutoPush ? '开启' : '关闭'}`
+      return h.text(`自动推送已${config.enableAutoPush ? '开启' : '关闭'}`)
     })
 
   ctx.command('wordpress.mention', '切换 @全体成员 开关')
     .action(async ({ session }) => {
+      // 检查是否为超级管理员
+      if (!session || !session.userId) {
+        ctx.logger.warn('匿名用户尝试调用 wordpress.mention 命令')
+        return h.text('您不是超级管理员，无法执行此命令')
+      }
+      
+      // 获取当前用户的QQ号（兼容不同平台格式，如 onebot:123456789 -> 123456789）
+      const userId = session.userId.replace(/^\w+:/, '')
+      
+      // 检查当前用户是否在插件配置的超级管理员列表中
+      if (!config.superAdmins || !config.superAdmins.includes(userId)) {
+        ctx.logger.warn(`非超级管理员 ${userId} 尝试调用 wordpress.mention 命令`)
+        return h.text('您不是超级管理员，无法执行此命令')
+      }
+      
       ctx.logger.info('命令 wordpress.mention 被调用')
       config.mentionAll = !config.mentionAll
-      return `@全体成员 已${config.mentionAll ? '开启' : '关闭'}`
+      return h.text(`@全体 已${config.mentionAll ? '开启' : '关闭'}`)
     })
 
   ctx.command('wordpress.set-url <url>', '修改 WordPress 站点地址')
     .action(async ({ session }, url) => {
-      const userId = session?.userId || 'unknown'
+      // 检查是否为超级管理员
+      if (!session || !session.userId) {
+        ctx.logger.warn('匿名用户尝试调用 wordpress.set-url 命令')
+        return h.text('您不是超级管理员，无法执行此命令')
+      }
+      
+      // 获取当前用户的QQ号（兼容不同平台格式，如 onebot:123456789 -> 123456789）
+      const userId = session.userId.replace(/^\w+:/, '')
+      
+      // 检查当前用户是否在插件配置的超级管理员列表中
+      if (!config.superAdmins || !config.superAdmins.includes(userId)) {
+        ctx.logger.warn(`非超级管理员 ${userId} 尝试调用 wordpress.set-url 命令`)
+        return h.text('您不是超级管理员，无法执行此命令')
+      }
+      
       ctx.logger.info(`命令 wordpress.set-url 被调用，调用者：${userId}，新地址：${url}`)
       
       // 修改站点地址
       config.wordpressUrl = url
       ctx.logger.info(`站点地址已修改为：${url}`)
-      return `WordPress 站点地址已修改为：${url}`
+      return h.text(`WordPress 站点地址已修改为：${url}`)
     })
 
   ctx.command('wordpress.pushed', '查看已推送的文章列表')
     .action(async () => {
       ctx.logger.info('命令 wordpress.pushed 被调用')
       
-      // 获取已推送的文章记录
-      const records = await ctx.database.get('wordpress_posts', {}, {
+      // 获取已推送的文章记录，使用 wordpress_post_updates 表
+      const records = await ctx.database.get('wordpress_post_updates', {}, {
         sort: {
           pushedAt: 'desc'
         }
       })
       if (records.length === 0) {
-        return '暂无已推送文章记录'
+        return h.text('暂无已推送文章记录')
       }
       
-      let message = '📋 已推送文章列表（按时间倒序）：\n\n'
+      // 使用数组拼接消息，便于控制格式和长度
+      const messageParts = ['📋 已推送文章列表（按时间倒序）：']
       for (const record of records) {
-        message += `${record.id}. 文章 ID: ${record.postId}\n`
-        message += `📅 推送时间: ${new Date(record.pushedAt).toLocaleString('zh-CN')}\n\n`
+        messageParts.push(`${record.id}. 文章 ID: ${record.postId}`)
+        messageParts.push(`📅 推送时间: ${new Date(record.pushedAt).toLocaleString('zh-CN')}`)
+        messageParts.push('') // 空行分隔
       }
       
-      return message
+      let message = messageParts.join('\n')
+      
+      // 长度验证，超过 450 字符则精简
+      if (message.length > 450) {
+        ctx.logger.warn(`消息过长，长度: ${message.length}，将进行精简`)
+        message = messageParts.slice(0, 10).join('\n') + '\n... 更多记录请查看完整列表'
+      }
+      
+      return h.text(message)
     })
 
   ctx.command('wordpress.clean [days]', '清理指定天数前的推送记录（默认 30 天）')
     .action(async ({ session }, days) => {
+      // 检查是否为超级管理员
+      if (!session || !session.userId) {
+        ctx.logger.warn('匿名用户尝试调用 wordpress.clean 命令')
+        return h.text('您不是超级管理员，无法执行此命令')
+      }
+      
+      // 获取当前用户的QQ号（兼容不同平台格式，如 onebot:123456789 -> 123456789）
+      const userId = session.userId.replace(/^\w+:/, '')
+      
+      // 检查当前用户是否在插件配置的超级管理员列表中
+      if (!config.superAdmins || !config.superAdmins.includes(userId)) {
+        ctx.logger.warn(`非超级管理员 ${userId} 尝试调用 wordpress.clean 命令`)
+        return h.text('您不是超级管理员，无法执行此命令')
+      }
+      
       ctx.logger.info(`命令 wordpress.clean 被调用，天数：${days || '默认'}`)
       
       // 设置默认天数
       const daysToKeep = days ? parseInt(days) : 30
       if (isNaN(daysToKeep) || daysToKeep <= 0) {
-        return '请输入有效的天数'
+        return h.text('请输入有效的天数')
       }
       
       // 计算清理时间点
@@ -688,16 +859,10 @@ ${targetText}
       cutoffDate.setDate(cutoffDate.getDate() - daysToKeep)
       
       // 获取所有记录
-      const allPostRecords = await ctx.database.get('wordpress_posts', {})
       const allUpdateRecords = await ctx.database.get('wordpress_post_updates', {})
       const allUserRecords = await ctx.database.get('wordpress_user_registrations', {})
-      const allGroupRecords = await ctx.database.get('wordpress_group_pushes', {})
       
       // 筛选需要删除的记录
-      const postRecordsToRemove = allPostRecords.filter(record => {
-        return new Date(record.pushedAt) < cutoffDate
-      })
-      
       const updateRecordsToRemove = allUpdateRecords.filter(record => {
         return new Date(record.pushedAt) < cutoffDate
       })
@@ -706,17 +871,8 @@ ${targetText}
         return new Date(record.pushedAt) < cutoffDate
       })
       
-      const groupRecordsToRemove = allGroupRecords.filter(record => {
-        return new Date(record.pushedAt) < cutoffDate
-      })
-      
       // 删除旧记录
       let result = 0
-      
-      for (const record of postRecordsToRemove) {
-        await ctx.database.remove('wordpress_posts', { id: record.id })
-        result++
-      }
       
       for (const record of updateRecordsToRemove) {
         await ctx.database.remove('wordpress_post_updates', { id: record.id })
@@ -728,39 +884,37 @@ ${targetText}
         result++
       }
       
-      for (const record of groupRecordsToRemove) {
-        await ctx.database.remove('wordpress_group_pushes', { id: record.id })
-        result++
-      }
-      
       ctx.logger.info(`已清理 ${result} 条 ${daysToKeep} 天前的推送记录`)
-      return `已清理 ${result} 条 ${daysToKeep} 天前的推送记录`
+      return h.text(`已清理 ${result} 条 ${daysToKeep} 天前的推送记录`)
     })
 
   ctx.command('wordpress', 'WordPress 推送插件菜单')
     .action(() => {
       ctx.logger.info('命令 wordpress 被调用')
-      return `📚 WordPress 推送插件菜单：
-
-🔹 /wordpress.status - 查看插件状态
-🔹 /wordpress.latest - 查看最新文章
-🔹 /wordpress.list - 查看文章列表
-🔹 /wordpress.push - 手动推送最新文章
-🔹 /wordpress.set-url <url> - 修改 WordPress 站点地址
-🔹 /wordpress.pushed - 查看已推送文章列表
-🔹 /wordpress.clean [days] - 清理旧推送记录
-🔹 /wordpress.toggle - 切换自动推送开关
-🔹 /wordpress.toggle-update - 切换文章更新推送开关
-🔹 /wordpress.toggle-user - 切换新用户注册推送开关
-🔹 /wordpress.mention - 切换 @全体成员 开关
-
-💡 提示：所有命令都需要加 / 前缀`
+      
+      // 使用数组拼接消息，便于控制格式和长度
+      const messageParts = [
+        '📚 WordPress 推送插件菜单：',
+        '',
+        '🔹 /wordpress.status - 查看插件状态',
+        '🔹 /wordpress.latest - 查看最新文章',
+        '🔹 /wordpress.list - 查看文章列表',
+        '🔹 /wordpress.push - 手动推送最新文章',
+        '🔹 /wordpress.set-url <url> - 修改 WordPress 站点地址',
+        '🔹 /wordpress.pushed - 查看已推送文章列表',
+        '🔹 /wordpress.clean [days] - 清理旧推送记录',
+        '🔹 /wordpress.toggle - 切换自动推送开关（仅超级管理员）',
+        '🔹 /wordpress.toggle-update - 切换文章更新推送开关（仅超级管理员）',
+        '🔹 /wordpress.toggle-user - 切换新用户注册推送开关（仅超级管理员）',
+        '🔹 /wordpress.mention - 切换 @全体 开关（仅超级管理员）',
+        '',
+        '💡 提示：所有命令都需要加 / 前缀'
+      ]
+      
+      let message = messageParts.join('\n')
+      ctx.logger.info(`准备返回消息，长度: ${message.length}`)
+      return h.text(message)
     })
-
-  ctx.on('ready', async () => {
-    ctx.logger.info('WordPress 推送插件已就绪')
-    await pushNewPosts()
-  })
 
   ctx.setInterval(() => {
     pushNewPosts()
