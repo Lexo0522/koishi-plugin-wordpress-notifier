@@ -383,7 +383,6 @@ npm install
 - ✅ 修复了`wordpress.clean`命令，移除了对`wordpress_posts`表的引用
 - ✅ 增强了推送日志，添加了详细的调试信息，便于追踪推送流程
 - ✅ 优化了`isGroupPushed`和`markGroupAsPushed`函数，添加了更多日志
-
 ### 2.1.0 (2026-01-25)
 
 - 🔧 更新文档结构，将"如何获取用户注册日期"内容从版本历史移至常见问题部分
